@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Light Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">Light</div>
+    <div class="header-controls">
+      <button id="btnWakeWord" class="wake-btn">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+        </svg>
+        <span id="wakeWordText">Wake Word</span>
+      </button>
+      <button id="btnClearHistory" class="clear-btn">Clear</button>
+      <a href="/logout" class="logout-btn">Logout</a>
+    </div>
+  </header>
+
+  <!-- Chat Container -->
+  <div class="chat-container">
+    <div id="assistantOutput" class="messages-area">
+      <div class="welcome-message">
+        <p>Hello! I'm Light, your assistant.</p>
+        <p class="welcome-sub">Ask me anything or just say "hey light" to start.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Waveform Overlay (Only shows when active) -->
+  <div id="waveformOverlay" class="waveform-overlay hidden">
+    <canvas id="waveform"></canvas>
+  </div>
+
+  <!-- Input Bar (Fixed at bottom) -->
+  <div class="input-bar">
+    <div class="input-wrapper">
+      <input 
+        type="text" 
+        id="textInput" 
+        placeholder="Type a message..."
+        class="text-input"
+      />
+      <button id="btnPushToTalk" class="mic-btn">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+        </svg>
+      </button>
+    </div>
+    <div class="status-bar">
+      <div class="status-indicator">
+        <div id="statusDot" class="status-dot"></div>
+        <span id="statusText">Ready</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/assistant.js"></script>
+</body>
+</html>
