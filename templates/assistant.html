@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Light Assistant</title>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="/static/style.css">
@@ -13,7 +13,7 @@
 <body>
   
   <!-- Sidebar -->
-  <aside class="sidebar" id="sidebar">
+  <aside class="sidebar collapsed" id="sidebar">
     <div class="sidebar-header">
       <div class="logo">Light</div>
       <button id="btnNewChat" class="new-chat-btn">
@@ -58,20 +58,36 @@
 
     <!-- Input Bar (Fixed at bottom) -->
     <div class="input-bar">
-      <div class="input-wrapper">
-        <input 
-          type="text" 
-          id="textInput" 
-          placeholder="Type a message..."
-          class="text-input"
-        />
-        <button id="btnPushToTalk" class="mic-btn">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
-          </svg>
-        </button>
-        <div class="waveform-container" id="waveformContainer">
-          <canvas id="waveform"></canvas>
+      <div class="input-container">
+        <!-- File Upload Preview -->
+        <div id="filePreview" class="file-preview hidden"></div>
+        
+        <div class="input-wrapper">
+          <input 
+            type="text" 
+            id="textInput" 
+            placeholder="Type a message..."
+            class="text-input"
+          />
+          <input 
+            type="file" 
+            id="fileInput" 
+            accept="image/*,.pdf,.txt,.doc,.docx" 
+            style="display: none;"
+          />
+          <!-- <button id="btnFileUpload" class="file-btn" title="Upload file">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+            </svg>
+          </button> -->
+          <button id="btnPushToTalk" class="mic-btn">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+            </svg>
+          </button>
+          <div class="waveform-container" id="waveformContainer">
+            <canvas id="waveform"></canvas>
+          </div>
         </div>
       </div>
       <div class="status-bar">

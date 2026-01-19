@@ -7,6 +7,7 @@ import os
 import secrets
 import json
 import logging
+import base64
 from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv

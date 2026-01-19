@@ -5,3 +5,12 @@ dist/
 build/
 
 /data
+
+.env
+*.pyc
+__pycache__/
+data/
+*.log
+.DS_Store
+venv/
+env/

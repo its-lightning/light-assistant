@@ -14,6 +14,9 @@ const elements = {
   assistantOutput: $('assistantOutput'),
   btnPushToTalk: $('btnPushToTalk'),
   btnNewChat: $('btnNewChat'),
+  btnFileUpload: $('btnFileUpload'),
+  fileInput: $('fileInput'),
+  filePreview: $('filePreview'),
   statusDot: $('statusDot'),
   statusText: $('statusText'),
   waveform: $('waveform'),
@@ -32,7 +35,9 @@ const state = {
   isSpeaking: false,
   currentConversation: null,
   isStreaming: false,
-  conversations: []
+  conversations: [],
+  currentStreamReader: null,
+  uploadedFile: null
 };
 
 // ============================================
@@ -135,6 +140,72 @@ function showError(message) {
   console.error('[ERROR]', message);
 }
 
+function addCopyButton(messageDiv, content) {
+  const actions = document.createElement('div');
+  actions.className = 'message-actions';
+  
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'message-action-btn';
+  copyBtn.innerHTML = '📋';
+  copyBtn.title = 'Copy';
+  copyBtn.onclick = () => copyToClipboard(content, copyBtn);
+  
+  actions.appendChild(copyBtn);
+  messageDiv.appendChild(actions);
+}
+
+function addStopButton(messageDiv) {
+  const actions = document.createElement('div');
+  actions.className = 'message-actions';
+  
+  const stopBtn = document.createElement('button');
+  stopBtn.className = 'message-action-btn stop-btn';
+  stopBtn.innerHTML = '⏹';
+  stopBtn.title = 'Stop';
+  stopBtn.onclick = stopGeneration;
+  
+  actions.appendChild(stopBtn);
+  messageDiv.appendChild(actions);
+  
+  return actions;
+}
+
+function copyToClipboard(text, button) {
+  // Strip markdown formatting for cleaner copy
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = marked.parse(text);
+  const plainText = tempDiv.textContent || tempDiv.innerText;
+  
+  navigator.clipboard.writeText(plainText).then(() => {
+    const originalText = button.innerHTML;
+    button.innerHTML = '✓';
+    button.style.color = '#10b981';
+    setTimeout(() => {
+      button.innerHTML = originalText;
+      button.style.color = '';
+    }, 2000);
+    console.log('[COPY] Copied to clipboard');
+  }).catch(err => {
+    console.error('[COPY] Failed to copy:', err);
+    button.innerHTML = '✗';
+    button.style.color = '#c62828';
+    setTimeout(() => {
+      button.innerHTML = '📋';
+      button.style.color = '';
+    }, 2000);
+  });
+}
+
+function stopGeneration() {
+  if (state.currentStreamReader) {
+    console.log('[STREAM] Stopping generation...');
+    state.currentStreamReader.cancel();
+    state.currentStreamReader = null;
+    state.isStreaming = false;
+    setStatus('', 'Ready');
+  }
+}
+
 function hideWelcome() {
   const welcome = elements.assistantOutput.querySelector('.welcome-message');
   if (welcome) {
@@ -144,6 +215,83 @@ function hideWelcome() {
 
 function scrollToBottom() {
   elements.assistantOutput.scrollTop = elements.assistantOutput.scrollHeight;
+}
+
+// ============================================
+// FILE UPLOAD
+// ============================================
+function setupFileUpload() {
+  elements.btnFileUpload.addEventListener('click', () => {
+    elements.fileInput.click();
+  });
+  
+  elements.fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  });
+}
+
+async function handleFileUpload(file) {
+  console.log('[FILE] Uploading:', file.name);
+  
+  // Check file size (10MB limit)
+  if (file.size > 10 * 1024 * 1024) {
+    showError('File too large. Maximum size is 10MB.');
+    return;
+  }
+  
+  // Show preview
+  showFilePreview(file);
+  
+  // Store file for sending
+  state.uploadedFile = file;
+}
+
+function showFilePreview(file) {
+  const size = formatFileSize(file.size);
+  const icon = getFileIcon(file.type);
+  
+  elements.filePreview.innerHTML = `
+    <div class="file-preview-icon">${icon}</div>
+    <div class="file-preview-info">
+      <div class="file-preview-name">${file.name}</div>
+      <div class="file-preview-size">${size}</div>
+    </div>
+    <button class="file-preview-remove" onclick="removeFile()">×</button>
+  `;
+  elements.filePreview.classList.remove('hidden');
+}
+
+function removeFile() {
+  state.uploadedFile = null;
+  elements.filePreview.classList.add('hidden');
+  elements.fileInput.value = '';
+  console.log('[FILE] Removed');
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function getFileIcon(type) {
+  if (type.startsWith('image/')) return '🖼️';
+  if (type === 'application/pdf') return '📄';
+  if (type.includes('word')) return '📝';
+  if (type.includes('text')) return '📃';
+  return '📎';
+}
+
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 // ============================================
@@ -297,6 +445,7 @@ function renderMessages(messages) {
       const div = document.createElement('div');
       div.className = 'message-bubble assistant-message';
       div.innerHTML = marked.parse(msg.content);
+      addCopyButton(div, msg.content);
       elements.assistantOutput.appendChild(div);
     }
   });
@@ -388,6 +537,30 @@ async function sendMessage(message) {
   setStatus('processing', 'Thinking...');
   state.isStreaming = true;
   
+  // Prepare request body
+  const requestBody = {
+    message: message.trim()
+  };
+  
+  // Add file if uploaded
+  if (state.uploadedFile) {
+    try {
+      const fileData = await fileToBase64(state.uploadedFile);
+      requestBody.file = {
+        name: state.uploadedFile.name,
+        type: state.uploadedFile.type,
+        data: fileData
+      };
+      console.log('[FILE] Attached to message');
+    } catch (err) {
+      console.error('[FILE] Failed to encode:', err);
+      showError('Failed to upload file');
+      state.isStreaming = false;
+      setStatus('', 'Ready');
+      return;
+    }
+  }
+  
   try {
     console.log('[CHAT] Calling /api/chat endpoint...');
     
@@ -396,7 +569,7 @@ async function sendMessage(message) {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ message: message.trim() })
+      body: JSON.stringify(requestBody)
     });
     
     if (!response.ok) {
@@ -409,50 +582,76 @@ async function sendMessage(message) {
     messageDiv.className = 'message-bubble assistant-message';
     elements.assistantOutput.appendChild(messageDiv);
     
+    // Add stop button
+    const actionsDiv = addStopButton(messageDiv);
+    
     const reader = response.body.getReader();
+    state.currentStreamReader = reader;
+    
     const decoder = new TextDecoder();
     let fullResponse = '';
     let chunkCount = 0;
     
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        console.log('[CHAT] Stream ended');
-        break;
-      }
-      
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n');
-      
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            
-            if (data.error) {
-              console.error('[CHAT] Server error:', data.error);
-              showError(data.error);
-              break;
-            }
-            
-            if (data.content) {
-              chunkCount++;
-              fullResponse += data.content;
-              messageDiv.innerHTML = marked.parse(fullResponse);
-              scrollToBottom();
-            }
-            
-            if (data.done) {
-              console.log(`[CHAT] Stream complete. ${chunkCount} chunks, ${fullResponse.length} chars`);
-              setStatus('', 'Ready');
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          console.log('[CHAT] Stream ended');
+          break;
+        }
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
               
-              // Reload conversations list to update title
-              loadConversations();
+              if (data.error) {
+                console.error('[CHAT] Server error:', data.error);
+                showError(data.error);
+                break;
+              }
+              
+              if (data.content) {
+                chunkCount++;
+                fullResponse += data.content;
+                messageDiv.innerHTML = marked.parse(fullResponse);
+                scrollToBottom();
+              }
+              
+              if (data.done) {
+                console.log(`[CHAT] Stream complete. ${chunkCount} chunks, ${fullResponse.length} chars`);
+                
+                // Remove stop button, add copy button
+                actionsDiv.remove();
+                addCopyButton(messageDiv, fullResponse);
+                
+                setStatus('', 'Ready');
+                
+                // Clear file after sending
+                if (state.uploadedFile) {
+                  removeFile();
+                }
+                
+                // Reload conversations list to update title
+                loadConversations();
+              }
+            } catch (e) {
+              console.error('[CHAT] Parse error:', e);
             }
-          } catch (e) {
-            console.error('[CHAT] Parse error:', e);
           }
         }
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.log('[CHAT] Stream stopped by user');
+        messageDiv.innerHTML += '<p style="color: #8b5a2b; font-style: italic; margin-top: 8px;">[Generation stopped]</p>';
+        actionsDiv.remove();
+        addCopyButton(messageDiv, fullResponse);
+      } else {
+        throw err;
       }
     }
     
@@ -461,6 +660,7 @@ async function sendMessage(message) {
     showError(error.message);
   } finally {
     state.isStreaming = false;
+    state.currentStreamReader = null;
     setStatus('', 'Ready');
   }
 }
@@ -531,6 +731,7 @@ elements.sidebarToggle.addEventListener('click', () => {
 // INITIALIZATION
 // ============================================
 console.log('[INIT] Setting up...');
+setupFileUpload();
 loadConversations();
 loadActiveConversation();
 setStatus('', 'Ready');

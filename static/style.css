@@ -267,7 +267,7 @@ body {
   flex: 1;
   overflow: hidden;
   padding: 20px 40px;
-  padding-bottom: 120px;
+  padding-bottom: 140px;
 }
 
 .messages-area {
@@ -277,6 +277,7 @@ body {
   flex-direction: column;
   gap: 16px;
   padding-right: 10px;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Custom Scrollbar */
@@ -324,6 +325,7 @@ body {
   word-wrap: break-word;
   animation: fadeIn 0.3s ease-in;
   line-height: 1.6;
+  position: relative;
 }
 
 .user-message {
@@ -340,6 +342,49 @@ body {
   color: #3e2723;
   border: 1px solid rgba(139, 90, 43, 0.1);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.message-actions {
+  position: absolute;
+  top: -8px;
+  right: 12px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.message-bubble:hover .message-actions {
+  opacity: 1;
+}
+
+.message-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(139, 90, 43, 0.1);
+  color: #6d4c41;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.message-action-btn:hover {
+  background: rgba(139, 90, 43, 0.2);
+  transform: scale(1.1);
+}
+
+.message-action-btn.stop-btn {
+  background: rgba(211, 47, 47, 0.1);
+  color: #c62828;
+}
+
+.message-action-btn.stop-btn:hover {
+  background: rgba(211, 47, 47, 0.2);
 }
 
 /* Markdown in assistant messages */
@@ -420,29 +465,99 @@ body {
   background: white;
   border-top: 1px solid rgba(139, 90, 43, 0.1);
   box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.05);
-  padding: 20px 40px;
+  padding: 12px 40px;
   transition: left 0.3s ease;
+  z-index: 100;
 }
 
 .sidebar.collapsed ~ .main-area .input-bar {
   left: 0;
 }
 
-.input-wrapper {
-  display: flex;
-  gap: 12px;
-  align-items: center;
+.input-container {
   max-width: 900px;
   margin: 0 auto;
+}
+
+.file-preview {
+  margin-bottom: 12px;
+  padding: 12px;
+  background: rgba(139, 90, 43, 0.05);
+  border: 1px solid rgba(139, 90, 43, 0.2);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-preview.hidden {
+  display: none;
+}
+
+.file-preview-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: rgba(139, 90, 43, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6d4c41;
+  flex-shrink: 0;
+}
+
+.file-preview-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-preview-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #3e2723;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-preview-size {
+  font-size: 12px;
+  color: #8b5a2b;
+  opacity: 0.7;
+}
+
+.file-preview-remove {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(211, 47, 47, 0.1);
+  color: #c62828;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.file-preview-remove:hover {
+  background: rgba(211, 47, 47, 0.2);
+}
+
+.input-wrapper {
+  display: flex;
+  gap: 8px;
+  align-items: center;
   position: relative;
 }
 
 .text-input {
   flex: 1;
-  padding: 14px 20px;
+  padding: 12px 18px;
   border: 1px solid rgba(139, 90, 43, 0.2);
   border-radius: 25px;
-  font-size: 16px;
+  font-size: 15px;
   font-family: 'Quicksand', sans-serif;
   background: #faf8f5;
   color: #3e2723;
@@ -459,20 +574,34 @@ body {
   color: rgba(139, 90, 43, 0.4);
 }
 
+.file-btn,
 .mic-btn {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: none;
-  background: #8b5a2b;
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
-  box-shadow: 0 2px 10px rgba(139, 90, 43, 0.3);
   flex-shrink: 0;
+}
+
+.file-btn {
+  background: #8b5a2b;
+  box-shadow: 0 2px 10px rgba(139, 90, 43, 0.3);
+}
+
+.file-btn:hover {
+  background: #6d4c41;
+  transform: scale(1.05);
+}
+
+.mic-btn {
+  background: #8b5a2b;
+  box-shadow: 0 2px 10px rgba(139, 90, 43, 0.3);
 }
 
 .mic-btn:hover {
@@ -491,13 +620,13 @@ body {
 
 .waveform-container {
   position: absolute;
-  right: 60px;
+  right: 96px;
   top: 50%;
   transform: translateY(-50%);
-  width: 200px;
-  height: 44px;
+  width: 180px;
+  height: 40px;
   background: white;
-  border-radius: 22px;
+  border-radius: 20px;
   border: 1px solid rgba(139, 90, 43, 0.2);
   overflow: hidden;
   opacity: 0;
@@ -515,7 +644,6 @@ body {
 }
 
 .status-bar {
-  max-width: 900px;
   margin: 8px auto 0;
   display: flex;
   justify-content: center;
@@ -570,6 +698,11 @@ body {
 
 /* Responsive */
 @media (max-width: 768px) {
+  body {
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+  }
+  
   .sidebar {
     position: fixed;
     left: 0;
@@ -585,6 +718,8 @@ body {
   
   .sidebar-toggle {
     left: 0;
+    top: 20px;
+    transform: none;
   }
   
   .sidebar:not(.collapsed) + .sidebar-toggle {
@@ -597,30 +732,82 @@ body {
   
   .input-bar {
     left: 0 !important;
+    padding: 8px 12px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
   }
   
   .header {
-    padding: 16px 20px;
+    padding: 12px 16px;
   }
   
   .header-title {
-    font-size: 20px;
+    font-size: 18px;
   }
   
   .chat-container {
-    padding: 16px 20px;
-    padding-bottom: 100px;
-  }
-  
-  .input-bar {
-    padding: 16px 20px;
+    padding: 12px 16px;
+    padding-bottom: 160px;
   }
   
   .message-bubble {
     max-width: 85%;
+    font-size: 15px;
+  }
+  
+  .text-input {
+    font-size: 16px;
+    padding: 10px 16px;
+  }
+  
+  .file-btn,
+  .mic-btn {
+    width: 36px;
+    height: 36px;
   }
   
   .waveform-container {
-    display: none;
+    display: none !important;
+  }
+  
+  .input-wrapper {
+    gap: 6px;
+  }
+  
+  .file-preview {
+    margin-bottom: 8px;
+    padding: 8px;
+  }
+  
+  .file-preview-icon {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .message-actions {
+    opacity: 1;
+    top: -6px;
+    right: 8px;
+  }
+  
+  .message-action-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+  }
+  
+  /* Fix mobile keyboard issue */
+  .input-bar {
+    position: fixed;
+    bottom: 0;
+  }
+  
+  /* Ensure scrolling works on mobile */
+  .messages-area {
+    padding-bottom: 20px;
+  }
+  
+  /* Prevent zoom on input focus */
+  input[type="text"]:focus {
+    font-size: 16px;
   }
 }
