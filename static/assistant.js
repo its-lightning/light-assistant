@@ -1,7 +1,5 @@
 // ============================================================================
 // LIGHT ASSISTANT - FRONTEND
-// Fixed: Text input, streaming, error handling
-// Enhanced: Proper error logging and debugging
 // ============================================================================
 
 console.log('[INIT] Light Assistant Loading...');
@@ -12,25 +10,18 @@ console.log('[INIT] Light Assistant Loading...');
 const $ = (id) => document.getElementById(id);
 
 const elements = {
-  // Input
   textInput: $('textInput'),
-  
-  // Output
   assistantOutput: $('assistantOutput'),
-  
-  // Controls
   btnPushToTalk: $('btnPushToTalk'),
-  btnWakeWord: $('btnWakeWord'),
-  btnClearHistory: $('btnClearHistory'),
-  wakeWordText: $('wakeWordText'),
-  
-  // Status
+  btnNewChat: $('btnNewChat'),
   statusDot: $('statusDot'),
   statusText: $('statusText'),
-  
-  // Waveform
   waveform: $('waveform'),
-  waveformOverlay: $('waveformOverlay')
+  waveformContainer: $('waveformContainer'),
+  conversationsList: $('conversationsList'),
+  sidebar: $('sidebar'),
+  sidebarToggle: $('sidebarToggle'),
+  mainArea: $('mainArea')
 };
 
 // ============================================
@@ -39,9 +30,9 @@ const elements = {
 const state = {
   isRecording: false,
   isSpeaking: false,
-  wakeWordActive: false,
-  currentStream: null,
-  wakeRecognition: null
+  currentConversation: null,
+  isStreaming: false,
+  conversations: []
 };
 
 // ============================================
@@ -72,7 +63,12 @@ class Waveform {
   }
   
   setActive(active) {
-    this.targetAmplitude = active ? 20 : 2;
+    this.targetAmplitude = active ? 15 : 2;
+    if (active) {
+      elements.waveformContainer.classList.add('active');
+    } else {
+      elements.waveformContainer.classList.remove('active');
+    }
   }
   
   animate() {
@@ -113,12 +109,9 @@ function setStatus(type, message) {
   elements.statusDot.className = `status-dot ${type}`;
   elements.statusText.textContent = message;
   
-  // Show/hide waveform based on activity
   if (type === 'recording' || type === 'processing') {
-    elements.waveformOverlay.classList.remove('hidden');
     waveform.setActive(true);
   } else {
-    elements.waveformOverlay.classList.add('hidden');
     waveform.setActive(false);
   }
 }
@@ -128,7 +121,8 @@ function showUserInput(text) {
   messageDiv.className = 'message-bubble user-message';
   messageDiv.textContent = text;
   elements.assistantOutput.appendChild(messageDiv);
-  elements.assistantOutput.scrollTop = elements.assistantOutput.scrollHeight;
+  hideWelcome();
+  scrollToBottom();
 }
 
 function showError(message) {
@@ -136,8 +130,20 @@ function showError(message) {
   errorDiv.className = 'message-bubble assistant-message';
   errorDiv.innerHTML = `<p style="color: #c62828;">${message}</p>`;
   elements.assistantOutput.appendChild(errorDiv);
-  elements.assistantOutput.scrollTop = elements.assistantOutput.scrollHeight;
+  hideWelcome();
+  scrollToBottom();
   console.error('[ERROR]', message);
+}
+
+function hideWelcome() {
+  const welcome = elements.assistantOutput.querySelector('.welcome-message');
+  if (welcome) {
+    welcome.style.display = 'none';
+  }
+}
+
+function scrollToBottom() {
+  elements.assistantOutput.scrollTop = elements.assistantOutput.scrollHeight;
 }
 
 // ============================================
@@ -173,14 +179,11 @@ async function recordVoice(duration = 6000) {
     };
     
     recognition.onresult = (event) => {
-      let interim = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
           finalTranscript += transcript + ' ';
           console.log('[VOICE] Final transcript:', transcript);
-        } else {
-          interim += transcript;
         }
       }
     };
@@ -211,6 +214,162 @@ async function recordVoice(duration = 6000) {
 }
 
 // ============================================
+// CONVERSATION MANAGEMENT
+// ============================================
+async function loadConversations() {
+  try {
+    const res = await fetch('/api/conversations');
+    const data = await res.json();
+    state.conversations = data.conversations;
+    
+    console.log('[CONV] Loaded', state.conversations.length, 'conversations');
+    
+    renderConversationsList();
+  } catch (err) {
+    console.error('[CONV] Failed to load conversations:', err);
+  }
+}
+
+function renderConversationsList() {
+  if (state.conversations.length === 0) {
+    elements.conversationsList.innerHTML = `
+      <div class="conversations-loading">No conversations yet</div>
+    `;
+    return;
+  }
+  
+  elements.conversationsList.innerHTML = '';
+  
+  state.conversations.forEach(conv => {
+    const div = document.createElement('div');
+    div.className = `conversation-item ${conv.is_active ? 'active' : ''}`;
+    div.innerHTML = `
+      <div class="conversation-title">${conv.title}</div>
+      <button class="delete-conv-btn" onclick="deleteConversation(event, '${conv.id}')">×</button>
+    `;
+    
+    div.onclick = (e) => {
+      if (!e.target.classList.contains('delete-conv-btn')) {
+        activateConversation(conv.id);
+      }
+    };
+    
+    elements.conversationsList.appendChild(div);
+  });
+}
+
+async function loadActiveConversation() {
+  try {
+    const res = await fetch('/api/conversations/active');
+    state.currentConversation = await res.json();
+    
+    console.log('[CONV] Loaded conversation:', state.currentConversation.id);
+    
+    // Render existing messages
+    if (state.currentConversation.messages && state.currentConversation.messages.length > 0) {
+      renderMessages(state.currentConversation.messages);
+    }
+  } catch (err) {
+    console.error('[CONV] Failed to load conversation:', err);
+  }
+}
+
+function renderMessages(messages) {
+  // Clear output except welcome message
+  const welcome = elements.assistantOutput.querySelector('.welcome-message');
+  elements.assistantOutput.innerHTML = '';
+  
+  if (messages.length === 0) {
+    if (welcome) {
+      elements.assistantOutput.appendChild(welcome);
+    }
+    return;
+  }
+  
+  // Render all messages
+  messages.forEach(msg => {
+    if (msg.role === 'user') {
+      const div = document.createElement('div');
+      div.className = 'message-bubble user-message';
+      div.textContent = msg.content;
+      elements.assistantOutput.appendChild(div);
+    } else if (msg.role === 'assistant') {
+      const div = document.createElement('div');
+      div.className = 'message-bubble assistant-message';
+      div.innerHTML = marked.parse(msg.content);
+      elements.assistantOutput.appendChild(div);
+    }
+  });
+  
+  scrollToBottom();
+}
+
+async function createNewChat() {
+  try {
+    console.log('[CONV] Creating new conversation...');
+    const res = await fetch('/api/conversations/new', { method: 'POST' });
+    state.currentConversation = await res.json();
+    
+    // Clear UI
+    elements.assistantOutput.innerHTML = `
+      <div class="welcome-message">
+        <p>Hello! I'm Light, your assistant.</p>
+        <p class="welcome-sub">Ask me anything to get started.</p>
+      </div>
+    `;
+    
+    // Reload conversations list
+    await loadConversations();
+    
+    console.log('[CONV] New conversation created:', state.currentConversation.id);
+  } catch (err) {
+    console.error('[CONV] Failed to create conversation:', err);
+    showError('Failed to create new conversation');
+  }
+}
+
+async function activateConversation(convId) {
+  try {
+    console.log('[CONV] Activating conversation:', convId);
+    const res = await fetch(`/api/conversations/${convId}/activate`, { method: 'POST' });
+    state.currentConversation = await res.json();
+    
+    // Render messages
+    renderMessages(state.currentConversation.messages);
+    
+    // Update list
+    renderConversationsList();
+    
+    console.log('[CONV] Conversation activated');
+  } catch (err) {
+    console.error('[CONV] Failed to activate conversation:', err);
+    showError('Failed to load conversation');
+  }
+}
+
+async function deleteConversation(event, convId) {
+  event.stopPropagation();
+  
+  if (!confirm('Delete this conversation?')) {
+    return;
+  }
+  
+  try {
+    console.log('[CONV] Deleting conversation:', convId);
+    await fetch(`/api/conversations/${convId}`, { method: 'DELETE' });
+    
+    // Reload conversations and active conversation
+    await loadConversations();
+    await loadActiveConversation();
+    
+    console.log('[CONV] Conversation deleted');
+  } catch (err) {
+    console.error('[CONV] Failed to delete conversation:', err);
+    showError('Failed to delete conversation');
+  }
+}
+
+// ============================================
 // CHAT API
 // ============================================
 async function sendMessage(message) {
@@ -219,14 +378,20 @@ async function sendMessage(message) {
     return;
   }
   
+  if (state.isStreaming) {
+    console.warn('[CHAT] Already streaming, ignoring');
+    return;
+  }
+  
   console.log('[CHAT] Sending message:', message);
   
   setStatus('processing', 'Thinking...');
+  state.isStreaming = true;
   
   try {
-    console.log('[CHAT] Calling /chat endpoint...');
+    console.log('[CHAT] Calling /api/chat endpoint...');
     
-    const response = await fetch('/chat', {
+    const response = await fetch('/api/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -274,16 +439,15 @@ async function sendMessage(message) {
               chunkCount++;
               fullResponse += data.content;
               messageDiv.innerHTML = marked.parse(fullResponse);
-              elements.assistantOutput.scrollTop = elements.assistantOutput.scrollHeight;
+              scrollToBottom();
             }
             
             if (data.done) {
               console.log(`[CHAT] Stream complete. ${chunkCount} chunks, ${fullResponse.length} chars`);
               setStatus('', 'Ready');
               
-              if (fullResponse && window.speechSynthesis) {
-                speakText(fullResponse);
-              }
+              // Reload conversations list to update title
+              loadConversations();
             }
           } catch (e) {
             console.error('[CHAT] Parse error:', e);
@@ -295,111 +459,10 @@ async function sendMessage(message) {
   } catch (error) {
     console.error('[CHAT] Error:', error);
     showError(error.message);
+  } finally {
+    state.isStreaming = false;
     setStatus('', 'Ready');
   }
-}
-
-// ============================================
-// TEXT TO SPEECH
-// ============================================
-function speakText(text) {
-  // if (!text || !window.speechSynthesis) {
-  //   console.warn('[TTS] Text-to-speech not available');
-  //   return;
-  // }
-  
-  // console.log('[TTS] Speaking...');
-  
-  // speechSynthesis.cancel();
-  
-  // const utterance = new SpeechSynthesisUtterance(text);
-  // utterance.rate = 1.1;
-  // utterance.pitch = 1.0;
-  // utterance.volume = 1.0;
-  
-  // utterance.onstart = () => {
-  //   state.isSpeaking = true;
-  // };
-  
-  // utterance.onend = () => {
-  //   state.isSpeaking = false;
-  // };
-  
-  // utterance.onerror = () => {
-  //   state.isSpeaking = false;
-  // };
-  
-  // speechSynthesis.speak(utterance);
-}
-
-// ============================================
-// WAKE WORD
-// ============================================
-function initWakeWord() {
-  console.log('[WAKE] Initializing wake word detection...');
-  
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    console.warn('[WAKE] Speech recognition not supported');
-    return;
-  }
-  
-  state.wakeRecognition = new SpeechRecognition();
-  state.wakeRecognition.continuous = true;
-  state.wakeRecognition.interimResults = true;
-  state.wakeRecognition.lang = 'en-US';
-  
-  state.wakeRecognition.onresult = async (event) => {
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript.toLowerCase();
-      
-      if (state.wakeWordActive && 
-          (transcript.includes('hey light') || transcript.includes('hey lite')) &&
-          !state.isRecording && !state.isSpeaking) {
-        
-        console.log('[WAKE] Wake word detected');
-        
-        try {
-          state.isRecording = true;
-          elements.btnPushToTalk.classList.add('recording');
-          setStatus('recording', 'Listening...');
-          
-          const text = await recordVoice();
-          
-          if (text) {
-            showUserInput(text);
-            await sendMessage(text);
-          }
-        } catch (err) {
-          console.error('[WAKE] Error:', err);
-          showError(err.message);
-        } finally {
-          state.isRecording = false;
-          elements.btnPushToTalk.classList.remove('recording');
-          setStatus('', 'Ready');
-        }
-      }
-    }
-  };
-  
-  state.wakeRecognition.onerror = (event) => {
-    console.warn('[WAKE] Error:', event.error);
-  };
-  
-  state.wakeRecognition.onend = () => {
-    if (state.wakeWordActive) {
-      console.log('[WAKE] Recognition ended, restarting...');
-      setTimeout(() => {
-        try {
-          state.wakeRecognition.start();
-        } catch (e) {
-          console.error('[WAKE] Restart failed:', e);
-        }
-      }, 500);
-    }
-  };
-  
-  console.log('[WAKE] Wake word detection initialized');
 }
 
 // ============================================
@@ -455,75 +518,24 @@ elements.textInput.addEventListener('keydown', async (e) => {
   }
 });
 
-// Wake Word Toggle
-elements.btnWakeWord.addEventListener('click', () => {
-  if (!state.wakeRecognition) {
-    console.error('[WAKE] Wake word not supported');
-    alert('Wake word not supported in your browser');
-    return;
-  }
-  
-  state.wakeWordActive = !state.wakeWordActive;
-  console.log('[WAKE] Toggle clicked, now:', state.wakeWordActive);
-  
-  if (state.wakeWordActive) {
-    elements.wakeWordText.textContent = 'Wake ON';
-    elements.btnWakeWord.classList.add('active');
-    
-    try {
-      state.wakeRecognition.start();
-      console.log('[WAKE] Started');
-    } catch (e) {
-      console.log('[WAKE] Already started');
-    }
-  } else {
-    elements.wakeWordText.textContent = 'Wake Word';
-    elements.btnWakeWord.classList.remove('active');
-    
-    state.wakeRecognition.stop();
-    console.log('[WAKE] Stopped');
-  }
-});
+// New Chat
+elements.btnNewChat.addEventListener('click', createNewChat);
 
-// Clear History
-elements.btnClearHistory.addEventListener('click', async () => {
-  if (!confirm('Clear conversation history?')) {
-    return;
-  }
-  
-  console.log('[HISTORY] Clearing conversation...');
-  
-  try {
-    const response = await fetch('/clear_history', {
-      method: 'POST'
-    });
-    
-    if (response.ok) {
-      elements.assistantOutput.innerHTML = `
-        <div class="welcome-message">
-          <p>Conversation cleared!</p>
-          <p class="welcome-sub">Start a new conversation.</p>
-        </div>
-      `;
-      console.log('[HISTORY] History cleared successfully');
-    } else {
-      throw new Error('Failed to clear history');
-    }
-  } catch (err) {
-    console.error('[HISTORY] Error:', err);
-    showError('Failed to clear history');
-  }
+// Sidebar Toggle
+elements.sidebarToggle.addEventListener('click', () => {
+  elements.sidebar.classList.toggle('collapsed');
+  console.log('[UI] Sidebar toggled');
 });
 
 // ============================================
 // INITIALIZATION
 // ============================================
-console.log('[INIT] Setting up event handlers...');
-initWakeWord();
+console.log('[INIT] Setting up...');
+loadConversations();
+loadActiveConversation();
 setStatus('', 'Ready');
 
 console.log('[INIT] Light Assistant Ready');
-console.log('[INIT] Try typing a message or clicking Push to Talk!');
 
 // Health check
 console.log('[HEALTH] Checking server status...');
